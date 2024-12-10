@@ -1,11 +1,12 @@
 mod db;
-mod models;
 mod handlers;
+mod models;
 mod routes;
 
+use crate::db::get_db_pool;
+use actix_cors::Cors;
 use actix_web::{App, HttpServer, middleware::Logger, web};
 use env_logger::Env;
-use crate::db::get_db_pool;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -15,7 +16,6 @@ async fn main() -> std::io::Result<()> {
 
     let pool = get_db_pool().await;
 
-
     let bind_address = dotenvy::var("SERVER_ADDRESS").unwrap_or("127.0.0.1:8181".to_string());
 
     println!("Starting server at http://{}", bind_address);
@@ -24,7 +24,17 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .app_data(web::Data::new(pool.clone()))
             .configure(routes::config)
-            .wrap(Logger::new(r#"%a "%r" %s-code %b-bytes "%{Referer}i" "%{User-Agent}i" %T-sec"#))
+            .wrap(Logger::new(
+                r#"%a "%r" %s-code %b-bytes "%{Referer}i" "%{User-Agent}i" %T-sec"#,
+            ))
+            .wrap(
+                Cors::default()
+                    .allow_any_origin()
+                    .allow_any_method()
+                    .allow_any_header(),
+            )
+            .app_data(web::Data::new(pool.clone()))
+            .configure(routes::config)
     })
     .bind(bind_address)?
     .run()
