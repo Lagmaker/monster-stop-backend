@@ -3,6 +3,7 @@ use actix_web::{HttpResponse, Responder, web};
 use sqlx::{Pool, Postgres};
 use uuid::Uuid;
 
+// OUTDATED!!!!!!!!!!!!!
 // Handlers for the drinks
 //     GET /drinks - list all drinks
 //     GET /drinks/{id} - get a single drink by ID
