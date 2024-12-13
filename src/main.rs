@@ -29,9 +29,10 @@ async fn main() -> std::io::Result<()> {
             ))
             .wrap(
                 Cors::default()
-                    .allow_any_origin()
-                    .allow_any_method()
-                    .allow_any_header(),
+                .allowed_origin("http://localhost:5511")
+                .allowed_methods(vec!["GET", "POST", "PUT", "DELETE"])
+                .allowed_headers(vec!["Content-Type"])
+                .max_age(3600)
             )
             .app_data(web::Data::new(pool.clone()))
             .configure(routes::config)

@@ -1,4 +1,4 @@
-use crate::models::{CreateDrink, Drink, UpdateDrink};
+use crate::models::{BrandSummary, CreateDrink, Drink, DrinkSearchParams, UpdateDrink};
 use actix_web::{HttpResponse, Responder, web};
 use sqlx::{Pool, Postgres};
 use uuid::Uuid;
@@ -160,4 +160,98 @@ pub async fn hello() -> impl Responder {
 
 pub async fn echo(req_body: String) -> impl Responder {
     HttpResponse::Ok().body(req_body)
+}
+
+pub async fn search_drinks(
+    db_pool: web::Data<Pool<Postgres>>,
+    query: web::Query<DrinkSearchParams>,
+) -> impl Responder {
+    let mut conditions = Vec::new();
+    let mut args = Vec::new();
+
+    if let Some(brand) = &query.brand {
+        conditions.push(format!("brand = ${}", args.len() + 1));
+        args.push(brand.to_string());
+    }
+
+    if let Some(min_caffeine) = query.min_caffeine {
+        conditions.push(format!("caffeine_content >= ${}", args.len() + 1));
+        args.push(min_caffeine.to_string());
+    }
+
+    if let Some(max_caffeine) = query.max_caffeine {
+        conditions.push(format!("caffeine_content <= ${}", args.len() + 1));
+        args.push(max_caffeine.to_string());
+    }
+
+    if let Some(min_sugar) = query.min_sugar {
+        conditions.push(format!("sugar_content >= ${}", args.len() + 1));
+        args.push(min_sugar.to_string());
+    }
+
+    if let Some(max_sugar) = query.max_sugar {
+        conditions.push(format!("sugar_content <= ${}", args.len() + 1));
+        args.push(max_sugar.to_string());
+    }
+
+    if let Some(min_price) = query.min_price {
+        conditions.push(format!("price >= ${}", args.len() + 1));
+        args.push(min_price.to_string());
+    }
+
+    if let Some(max_price) = query.max_price {
+        conditions.push(format!("price <= ${}", args.len() + 1));
+        args.push(max_price.to_string());
+    }
+
+    let base_sql = "SELECT * FROM drinks";
+    let final_sql = if conditions.is_empty() {
+        base_sql.to_string()
+    } else {
+        format!("{} WHERE {}", base_sql, conditions.join(" AND "))
+    };
+
+    let mut query_builder = sqlx::query_as::<_, Drink>(&final_sql);
+
+    // Bind the arguments in order
+    for (i, arg) in args.iter().enumerate() {
+        query_builder = query_builder.bind(arg);
+    }
+
+    let results = query_builder.fetch_all(db_pool.get_ref()).await;
+
+    match results {
+        Ok(drinks) => HttpResponse::Ok().json(drinks),
+        Err(e) => {
+            eprintln!("Error searching drinks: {:?}", e);
+            HttpResponse::InternalServerError().finish()
+        }
+    }
+}
+
+pub async fn brand_summary(db_pool: web::Data<Pool<Postgres>>) -> impl Responder {
+    // We'll use a GROUP BY query to aggregate data by brand
+    let sql = r#"
+        SELECT
+            brand,
+            COUNT(*) AS drink_count,
+            AVG(caffeine_content)::float8 AS avg_caffeine,
+            AVG(sugar_content)::float8 AS avg_sugar,
+            AVG(price)::float8 AS avg_price
+        FROM drinks
+        GROUP BY brand
+        ORDER BY brand;
+    "#;
+
+    let results = sqlx::query_as::<_, BrandSummary>(sql)
+        .fetch_all(db_pool.get_ref())
+        .await;
+
+    match results {
+        Ok(summaries) => HttpResponse::Ok().json(summaries),
+        Err(e) => {
+            eprintln!("Error computing brand summary: {:?}", e);
+            HttpResponse::InternalServerError().finish()
+        }
+    }
 }
